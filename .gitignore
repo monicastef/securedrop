@@ -1,0 +1,19 @@
+# General
+.DS_Store
+*.log
+
+# Python
+__pycache__/
+venv/
+
+# Go
+bin/
+
+# Java
+*.class
+*.jar
+out/
+
+# IDE
+.vscode/
+.idea/
