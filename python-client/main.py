@@ -8,6 +8,7 @@ import time
 from handshake import Identity, perform_handshake
 from crypto import encrypt, decrypt
 from protocol import ensure_dirs, list_shared_files, save_download, file_hash, build_get_res, SHARED_DIR
+from mdns import start_mdns
 
 class PeerConn:
     def __init__(self, name, sock, sock_file, key, remote_pub):
@@ -38,6 +39,18 @@ class App:
     def peer_names(self):
         with self.lock:
             return list(self.conns.keys())
+    
+    def connect_to_peer(self, addr):
+        import socket
+        try:
+            host, port = addr.split(":")
+            port = int(port)
+
+            sock = socket.socket()
+            sock.connect((host, port))
+            connection_loop(self, sock)
+        except:
+            pass
 
 def send_encrypted(pc: PeerConn, payload: str):
     nonce, ciphertext = encrypt(pc.key, payload.encode())
@@ -170,6 +183,7 @@ def main():
     app = App(Identity(args.name))
 
     threading.Thread(target=listen, args=(app, args.port), daemon=True).start()
+    zeroconf = start_mdns(app, args.port)
 
     if args.peers.strip():
         for addr in [x.strip() for x in args.peers.split(",") if x.strip()]:

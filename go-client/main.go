@@ -95,6 +95,8 @@ func main() {
 	}
 	app := NewApp(self)
 
+	startMDNS(app, *port)
+
 	ln, err := net.Listen("tcp", ":"+*port)
 	if err != nil {
 		panic(err)

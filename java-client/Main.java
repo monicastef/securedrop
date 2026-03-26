@@ -21,7 +21,6 @@ public class Main {
     }
 
     public static void connectionLoop(App app, Socket socket) {
-        System.out.println("DEBUG: connectionLoop started");
         try {
             HandshakeResult hr = Handshake.perform(socket, app.identity);
             PeerConn pc = new PeerConn(hr.remoteName, socket, hr.reader, hr.writer, hr.sessionKey, hr.remotePub);
@@ -41,7 +40,6 @@ public class Main {
                 byte[] ciphertext = Base64.getDecoder().decode(parts[2]);
                 byte[] plaintext = Crypto.decrypt(pc.key, nonce, ciphertext);
                 Protocol.processPayload(app, pc, new String(plaintext));
-                System.out.println("DEBUG: handshake complete with " + pc.name);
             }
         } catch (Exception e) {
             System.out.println("connection error: " + e.getMessage());

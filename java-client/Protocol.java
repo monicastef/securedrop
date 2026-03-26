@@ -59,7 +59,6 @@ public class Protocol {
     }
 
     public static void processPayload(Main.App app, PeerConn pc, String payload) throws Exception {
-        System.out.println("DEBUG payload: " + payload);
         String[] parts = payload.split("\\|");
         String cmd = parts[0];
 
@@ -72,7 +71,6 @@ public class Protocol {
             String files = parts.length > 1 ? parts[1] : "";
             System.out.println("[" + pc.name + "] shared files: " + (files.isEmpty() ? "(none)" : files));
         } else if (cmd.equals("GET_REQ")) {
-            System.out.println("DEBUG: GET_REQ received");
         if (parts.length < 2) {
             sendEncrypted(pc, "ERROR|missing filename");
             return;
