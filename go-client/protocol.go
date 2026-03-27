@@ -63,6 +63,18 @@ func (a *App) ListPeers() []string {
 	return out
 }
 
+func (a *App) HasPeer(addr string) bool {
+    a.Mu.Lock()
+    defer a.Mu.Unlock()
+
+    for _, p := range a.Conns {
+        if p.RemoteAddr == addr {
+            return true
+        }
+    }
+    return false
+}
+
 func sendEncrypted(pc *PeerConn, payload string) error {
 	nonce, ciphertext, err := Encrypt(pc.Key, []byte(payload))
 	if err != nil {

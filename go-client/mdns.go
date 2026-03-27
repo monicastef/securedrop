@@ -30,7 +30,9 @@ func startMDNS(app *App, port string) {
 		log.Fatal(err)
 	}
 
-	server, err := mdns.NewServer(&mdns.Config{Zone: service})
+	server, err := mdns.NewServer(&mdns.Config{
+		Zone: service,
+	})
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -44,7 +46,8 @@ func startMDNS(app *App, port string) {
 	
 			go func() {
 				for entry := range entriesCh {
-
+	
+					// only this service
 					if !strings.Contains(entry.Name, "_securedrop._tcp") {
 						continue
 					}
@@ -53,15 +56,25 @@ func startMDNS(app *App, port string) {
 						continue
 					}
 	
-					peer := entry.AddrV4.String() + ":" + strconv.Itoa(entry.Port)
+					peerPort := entry.Port
 	
 					// skip self
-					if strconv.Itoa(entry.Port) == port {
+					if strconv.Itoa(peerPort) == port {
 						continue
 					}
 	
-					fmt.Println("[mDNS] discovered", peer)
-					go connectWithRetry(app, peer)
+					// filter random devices
+					if peerPort < 9000 || peerPort > 9100 {
+						continue
+					}
+	
+					peer := entry.AddrV4.String() + ":" + strconv.Itoa(peerPort)
+	
+					if !app.HasPeer(peer) {
+						fmt.Println("[mDNS] discovered", peer)
+						go connectWithRetry(app, peer)
+					}
+					
 				}
 			}()
 	
@@ -75,7 +88,13 @@ func startMDNS(app *App, port string) {
 	
 			close(entriesCh)
 	
-			time.Sleep(5 * time.Second)
+			// time.Sleep(15 * time.Second)
+			
+			if len(app.ListPeers()) > 0 {
+				time.Sleep(30 * time.Second) // slow once connected
+			} else {
+				time.Sleep(5 * time.Second) // faster until first peer
+			}
 		}
 	}()
 

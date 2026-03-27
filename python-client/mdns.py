@@ -45,10 +45,11 @@ def start_mdns(app, port):
     # register self
     hostname = socket.gethostname()
     ip = socket.gethostbyname(hostname)
+    service_name = f"{hostname}-{port}.{SERVICE_TYPE}" 
 
     info = ServiceInfo(
         SERVICE_TYPE,
-        f"{hostname}.{SERVICE_TYPE}",
+        service_name,
         addresses=[socket.inet_aton(ip)],
         port=port,
         properties={},

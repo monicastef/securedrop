@@ -151,7 +151,8 @@ def connection_loop(app: App, sock: socket.socket):
 def listen(app: App, port: int):
     server = socket.socket()
     server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    server.bind(("127.0.0.1", port))
+    # server.bind(("127.0.0.1", port))
+    server.bind(("0.0.0.0", port))
     server.listen()
     print(f"{app.identity.name} listening on {port}")
 
