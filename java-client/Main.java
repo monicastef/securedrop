@@ -48,7 +48,7 @@ public class Main {
 
     public static void listen(App app, int port) throws Exception {
         ServerSocket server = new ServerSocket();
-        server.bind(new InetSocketAddress("127.0.0.1", port));
+        server.bind(new InetSocketAddress("0.0.0.0", port));
         System.out.println(app.identity.name + " listening on " + port);
 
         while (true) {

@@ -108,9 +108,21 @@ func listSharedFiles() []string {
 }
 
 func saveDownload(filename string, data []byte) error {
-	_ = os.MkdirAll("downloads", 0755)
+	 _ = os.MkdirAll("downloads", 0755)
 	path := filepath.Join("downloads", filepath.Base(filename))
-	return os.WriteFile(path, data, 0644)
+	// return os.WriteFile(path, data, 0644)
+	key := sha256Bytes([]byte("local-secret-key")) // simple local key
+
+	nonce, ciphertext, err := Encrypt(key, data)
+	if err != nil {
+		return err
+	}
+
+	payload := base64.StdEncoding.EncodeToString(nonce) + "|" +
+		base64.StdEncoding.EncodeToString(ciphertext)
+
+	return os.WriteFile(path, []byte(payload), 0600)
+	
 }
 
 func processPayload(a *App, pc *PeerConn, payload string) {
@@ -158,14 +170,14 @@ func processPayload(a *App, pc *PeerConn, payload string) {
 			base64.StdEncoding.EncodeToString(sig)
 	
 		_ = sendEncrypted(pc, msg)
-		fmt.Println("DEBUG: sending GET_REQ to", parts[1])
 
 	case "GET_RES":
-		if len(parts) != 5 {
+		if len(parts) < 5 {
 			fmt.Printf("[%s] malformed GET_RES\n", pc.Name)
 			return
 		}
-		filename := parts[1]
+		// filename := parts[1]
+		filename := filepath.Base(parts[1])
 		fileData, err1 := base64.StdEncoding.DecodeString(parts[2])
 		hash, err2 := base64.StdEncoding.DecodeString(parts[3])
 		sig, err3 := base64.StdEncoding.DecodeString(parts[4])
@@ -176,11 +188,13 @@ func processPayload(a *App, pc *PeerConn, payload string) {
 
 		actualHash := sha256Bytes(fileData)
 		if !equalBytes(actualHash, hash) {
-			fmt.Printf("[%s] hash mismatch for %s\n", pc.Name, filename)
+			// fmt.Printf("[%s] hash mismatch for %s\n", pc.Name, filename)
+			fmt.Printf("[%s] integrity check failed for %s\n", pc.Name, filename)
 			return
 		}
 		if !verifyHash(pc.RemotePub, hash, sig) {
-			fmt.Printf("[%s] signature verification failed for %s\n", pc.Name, filename)
+			// fmt.Printf("[%s] signature verification failed for %s\n", pc.Name, filename)
+			fmt.Printf("[%s] signature verification FAILED for %s\n", pc.Name, filename)
 			return
 		}
 		if err := saveDownload(filename, fileData); err != nil {
@@ -188,6 +202,7 @@ func processPayload(a *App, pc *PeerConn, payload string) {
 			return
 		}
 		fmt.Printf("[%s] downloaded and verified %s\n", pc.Name, filename)
+		fmt.Printf("sending %s to %s\n", filename, pc.Name)
 
 	case "ERROR":
 		if len(parts) >= 2 {

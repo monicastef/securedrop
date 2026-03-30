@@ -163,6 +163,19 @@ func main() {
 			} else {
 				fmt.Println("unknown peer")
 			}
+
+		case "rotate-key":
+			newId, err := NewIdentity(app.Self.Name)
+			if err != nil {
+				fmt.Println("key rotation failed:", err)
+				continue
+			}
+		
+			app.Self = newId
+			fmt.Println("key rotated successfully")
+		
+			// disconnect all peers
+			fmt.Println("existing connections invalid, reconnect peers.")
 		}
 	}
 }

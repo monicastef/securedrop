@@ -55,20 +55,34 @@ public class Handshake {
                 Base64.getEncoder().encodeToString(self.pub.getEncoded()) + "|" +
                 Base64.getEncoder().encodeToString(ephPubRaw) + "|" +
                 Base64.getEncoder().encodeToString(sig) + "\n";
+
         writer.write(hello);
         writer.flush();
 
         String line = reader.readLine();
-        if (line == null) throw new IOException("remote closed during handshake");
+        if (line == null) {
+            throw new IOException("remote closed during handshake");
+        }
+
+        line = line.trim();   // added
+
         String[] parts = line.split("\\|");
         if (parts.length != 5 || !parts[0].equals("HELLO")) {
             throw new IOException("invalid HELLO line: " + line);
         }
 
-        String remoteName = parts[1];
+        String remoteName = parts[1].trim();   // added
         byte[] remotePubRaw = Base64.getDecoder().decode(parts[2]);
         byte[] remoteEphRaw = Base64.getDecoder().decode(parts[3]);
         byte[] remoteSig = Base64.getDecoder().decode(parts[4]);
+
+        // added: match Go expectations
+        if (remotePubRaw.length != 32) {
+            throw new IOException("remote identity key wrong size: " + remotePubRaw.length);
+        }
+        if (remoteEphRaw.length != 32) {
+            throw new IOException("remote ephemeral key wrong size: " + remoteEphRaw.length);
+        }
 
         Ed25519PublicKeyParameters remotePub = new Ed25519PublicKeyParameters(remotePubRaw, 0);
         if (!verify(remotePub, remoteEphRaw, remoteSig)) {

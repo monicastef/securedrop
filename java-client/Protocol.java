@@ -5,6 +5,13 @@ import java.util.*;
 
 import org.bouncycastle.crypto.params.Ed25519PublicKeyParameters;
 
+import java.security.*;
+import java.util.Base64;
+import org.bouncycastle.crypto.params.*;
+import org.bouncycastle.crypto.generators.X25519KeyPairGenerator;
+import org.bouncycastle.crypto.AsymmetricCipherKeyPair;
+import org.bouncycastle.crypto.agreement.X25519Agreement;
+
 class PeerConn {
     public final String name;
     public final java.net.Socket socket;

@@ -1,29 +1,38 @@
 # Test Cases
 
 ## 1. Peer Discovery
-- Start Go and Python clients
-- Expected: automatic discovery and connection
+Start Go and Python clients  
+Expected: automatic discovery and connection
 
 ## 2. File Listing
-- Command: list <peer>
-- Expected: list of available files
+Command: list <peer>  
+Expected: list of available files
 
 ## 3. File Transfer
-- Command: get <peer> <file>
-- Expected: file received and verified
+Command: get <peer> <file>  
+Expected: file downloaded and verified
 
-## 4. File Integrity Failure
-- Modify file during transfer (or simulate wrong hash)
-- Expected: "file integrity check FAILED"
+## 4. Integrity Verification
+Modify file before sending  
+Expected: "integrity check FAILED"
 
-## 5. Consent Test
-- Reject file request
-- Expected: transfer does not occur
+## 5. Signature Verification
+Tamper with signature  
+Expected: "signature verification FAILED"
 
-## 6. Disconnection Handling
-- Stop one peer
-- Expected: error message or disconnect log
+## 6. Authentication
+Change peer identity (restart with new keys)  
+Expected: "identity mismatch"
 
-## 7. Multi-peer Transfer
-- Download file from different peer
-- Expected: file still verifies correctly
+## 7. Key Rotation
+Run: rotate-key  
+Reconnect  
+Expected: mismatch warning
+
+## 8. Disconnection Handling
+Stop a peer  
+Expected: disconnect message
+
+## 9. Multi-peer Transfer
+Download file from another peer  
+Expected: verification still succeeds
