@@ -32,7 +32,7 @@ func equalBytes(a, b []byte) bool {
 }
 
 func handleConn(app *App, conn net.Conn) {
-	pc, err := performHandshake(conn, app.Self)
+	pc, err := performHandshake(conn, app.Self, app)
 	if err != nil {
 		fmt.Println("handshake failed:", err)
 		_ = conn.Close()
@@ -89,7 +89,8 @@ func main() {
 	_ = os.MkdirAll("downloads", 0755)
 	_ = os.WriteFile(filepath.Join("shared_files", "go-note.txt"), []byte("hello from go"), 0644)
 
-	self, err := NewIdentity(*name)
+	// self, err := NewIdentity(*name)
+	self, err := LoadOrCreateIdentity(*name)
 	if err != nil {
 		panic(err)
 	}

@@ -51,7 +51,7 @@ func deriveSessionKey(priv [32]byte, peerPubRaw []byte) ([]byte, error) {
 	return sum[:], nil
 }
 
-func performHandshake(conn net.Conn, self *Identity) (*PeerConn, error) {
+func performHandshake(conn net.Conn, self *Identity, app *App) (*PeerConn, error) {
 	rw := bufio.NewReadWriter(bufio.NewReader(conn), bufio.NewWriter(conn))
 
 	ephPriv, ephPub, err := generateEphemeral()
@@ -110,6 +110,12 @@ func performHandshake(conn net.Conn, self *Identity) (*PeerConn, error) {
 	key, err := deriveSessionKey(ephPriv, remoteEph)
 	if err != nil {
 		return nil, err
+	}
+
+	if existing, ok := app.GetConn(remoteName); ok {
+		if !equalBytes(existing.RemotePub, remotePub) {
+			return nil, fmt.Errorf("identity mismatch for peer %s", remoteName)
+		}
 	}
 
 	return &PeerConn{

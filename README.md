@@ -1,6 +1,6 @@
 # SecureDrop
 
-CISC 468 Project – Secure Peer-to-Peer File Sharing Application
+CISC 468 Project: Secure Peer-to-Peer File Sharing Application
 
 ## Team Members
 - Monica Stef (Go Client)
@@ -24,5 +24,15 @@ The system guarantees:
 - `docs/` – Protocol specification and design
 - `tests/` – Test cases
 
-## Getting Started
-(Coming soon)
+## How to Run
+
+1. Start Python:
+   python3 main.py --name python --port 9002
+
+2. Start Go:
+   go run . --name go --port 9001
+
+3. Commands:
+   peers
+   list <peer>
+   get <peer> <file>

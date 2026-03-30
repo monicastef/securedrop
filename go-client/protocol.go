@@ -20,6 +20,7 @@ type PeerConn struct {
 	}
 	Key        []byte
 	RemotePub  []byte
+	// RemotePub ed25519.PublicKey
 	RemoteAddr string
 }
 
