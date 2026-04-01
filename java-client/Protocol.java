@@ -65,6 +65,10 @@ public class Protocol {
         return md.digest(data);
     }
 
+/*     public static boolean verify(Ed25519PublicKeyParameters pub, byte[] msg, byte[] sig) {
+        return Handshake.verify(pub, msg, sig);
+    }
+ */
     public static void processPayload(Main.App app, PeerConn pc, String payload) throws Exception {
         String[] parts = payload.split("\\|");
         String cmd = parts[0];
@@ -78,33 +82,45 @@ public class Protocol {
             String files = parts.length > 1 ? parts[1] : "";
             System.out.println("[" + pc.name + "] shared files: " + (files.isEmpty() ? "(none)" : files));
         } else if (cmd.equals("GET_REQ")) {
-        if (parts.length < 2) {
-            sendEncrypted(pc, "ERROR|missing filename");
-            return;
-        }
+            if (parts.length < 2) {
+                sendEncrypted(pc, "ERROR|missing filename");
+                return;
+            }
 
-        String filename = Paths.get(parts[1]).getFileName().toString();
+            String filename = Paths.get(parts[1]).getFileName().toString();
 
-        // ask user
-        System.out.println("[" + pc.name + "] wants file '" + filename + "' → auto-accepting");
+            // ask user
+            System.out.print("[" + pc.name + "] wants file '" + filename + "'. Accept? (y/n): ");
 
-        Path path = Paths.get("shared_files", filename);
-        if (!Files.exists(path)) {
-            sendEncrypted(pc, "ERROR|file not found");
-            return;
-        }
+            Scanner scanner = new Scanner(System.in);
+            String resp = scanner.nextLine().trim();
 
-        byte[] data = Files.readAllBytes(path);
-        byte[] hash = sha256(data);
-        byte[] sig = Handshake.sign(app.identity.priv, hash);
+            if (!resp.equalsIgnoreCase("y")) {
+                sendEncrypted(pc, "ERROR|request denied");
+                return;
+            }
 
-        String msg = "GET_RES|" + filename + "|" +
-                Base64.getEncoder().encodeToString(data) + "|" +
-                Base64.getEncoder().encodeToString(hash) + "|" +
-                Base64.getEncoder().encodeToString(sig);
-        sendEncrypted(pc, msg);
+            Path path = Paths.get("shared_files", filename);
+            if (!Files.exists(path)) {
+                sendEncrypted(pc, "ERROR|file not found");
+                return;
+            }
+
+            byte[] data = Files.readAllBytes(path);
+            byte[] hash = sha256(data);
+            byte[] sig = Handshake.sign(app.identity.priv, hash);
+            byte[] originPub = app.identity.pub.getEncoded();
+            String originName = app.identity.name;
+
+            String msg = "GET_RES|" + filename + "|" +
+                    Base64.getEncoder().encodeToString(data) + "|" +
+                    Base64.getEncoder().encodeToString(hash) + "|" +
+                    Base64.getEncoder().encodeToString(sig) + "|" +
+                    Base64.getEncoder().encodeToString(originPub) + "|"+
+                    originName;
+            sendEncrypted(pc, msg);
         } else if (cmd.equals("GET_RES")) {
-            if (parts.length != 5) {
+            if (parts.length != 7) {
                 System.out.println("[" + pc.name + "] malformed GET_RES");
                 return;
             }
@@ -119,14 +135,25 @@ public class Protocol {
                 return;
             }
 
-            Ed25519PublicKeyParameters remotePub = new Ed25519PublicKeyParameters(pc.remotePub, 0);
+            /* Ed25519PublicKeyParameters remotePub = new Ed25519PublicKeyParameters(pc.remotePub, 0);
             if (!Handshake.verify(remotePub, hash, sig)) {
                 System.out.println("[" + pc.name + "] signature verification failed for " + filename);
                 return;
+            } */
+            byte[] originPubRaw = Base64.getDecoder().decode(parts[5]);
+            String originName = parts[6];
+
+            Ed25519PublicKeyParameters originPub = new Ed25519PublicKeyParameters(originPubRaw, 0);
+
+            if (!Handshake.verify(originPub, hash, sig)) {
+                System.out.println("[" + pc.name + "] signature verification FAILED for "
+                        + filename + " (original: " + originName + ")");
+                return;
             }
+            
 
             Files.write(Paths.get("downloads", filename), data);
-            System.out.println("[" + pc.name + "] downloaded and verified " + filename);
+            System.out.println("[" + pc.name + "] downloaded and verified " + filename + " (original: " + originName + ")");
         } else if (cmd.equals("ERROR")) {
             String msg = parts.length > 1 ? parts[1] : "unknown";
             System.out.println("[" + pc.name + "] ERROR: " + msg);

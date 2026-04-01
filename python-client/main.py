@@ -4,10 +4,13 @@ import os
 import socket
 import threading
 import time
+import queue
+
+request_queue = queue.Queue()
 
 from handshake import Identity, perform_handshake
 from crypto import encrypt, decrypt
-from protocol import ensure_dirs, list_shared_files, save_download, file_hash, build_get_res, SHARED_DIR
+from protocol import ensure_dirs, list_shared_files, save_metadata, save_download, file_hash, build_get_res, SHARED_DIR
 from mdns import start_mdns
 
 class PeerConn:
@@ -82,26 +85,23 @@ def process_payload(app: App, pc: PeerConn, payload: str):
             return
 
         filename = os.path.basename(parts[1])
+        print(f"[{pc.name}] wants file '{filename}'")
 
-        # ask user
-        print(f"[{pc.name}] wants file '{filename}' → auto-accepting")
+        # send to main thread for user input
+        request_queue.put((pc, filename))
+        print("DEBUG: queued request for", filename)
 
-        path = SHARED_DIR / filename
-        if not path.exists():
-            send_encrypted(pc, "ERROR|file not found")
-            return
-
-        data = path.read_bytes()
-        send_encrypted(pc, build_get_res(app.identity.priv, filename, data))
-
-    elif cmd == "GET_RES":
-        if len(parts) != 5:
+    elif cmd == "GET_RES":        
+        if len(parts) != 7:
             print(f"[{pc.name}] malformed GET_RES")
             return
+
         filename = parts[1]
         data = base64.b64decode(parts[2])
         expected_hash = base64.b64decode(parts[3])
         sig = base64.b64decode(parts[4])
+        origin_pub = base64.b64decode(parts[5])
+        origin_name = parts[6]
 
         actual_hash = file_hash(data)
         if actual_hash != expected_hash:
@@ -109,11 +109,18 @@ def process_payload(app: App, pc: PeerConn, payload: str):
             return
 
         from cryptography.hazmat.primitives.asymmetric import ed25519
-        remote_pub = ed25519.Ed25519PublicKey.from_public_bytes(pc.remote_pub)
-        remote_pub.verify(sig, expected_hash)
+
+        try:
+            pub = ed25519.Ed25519PublicKey.from_public_bytes(origin_pub)
+            pub.verify(sig, expected_hash)
+        except Exception:
+            print(f"[{pc.name}] signature verification FAILED for {filename} (original: {origin_name})")
+            return
 
         save_download(filename, data)
-        print(f"[{pc.name}] downloaded and verified {filename}")
+        save_metadata(filename, origin_name, origin_pub, expected_hash, sig)
+
+        print(f"[{pc.name}] downloaded and verified {filename} (original: {origin_name})")
 
     elif cmd == "ERROR":
         msg = parts[1] if len(parts) > 1 else "unknown"
@@ -173,6 +180,36 @@ def connect_with_retry(app: App, addr: str):
             time.sleep(1)
     print("could not connect to", addr)
 
+""" def input_loop(app):
+    while True:
+        line = input().strip()
+        parts = line.split(" ")
+
+        if parts[0] == "peers":
+            print("connected peers:", ", ".join(app.peer_names()))
+
+        elif parts[0] == "ping" and len(parts) == 2:
+            pc = app.get_conn(parts[1])
+            if pc:
+                send_encrypted(pc, "PING")
+            else:
+                print("unknown peer")
+
+        elif parts[0] == "list" and len(parts) == 2:
+            pc = app.get_conn(parts[1])
+            if pc:
+                send_encrypted(pc, "LIST_REQ")
+            else:
+                print("unknown peer")
+
+        elif parts[0] == "get" and len(parts) == 3:
+            pc = app.get_conn(parts[1])
+            if pc:
+                print(f"DEBUG: sending GET_REQ to {parts[1]}")
+                send_encrypted(pc, "GET_REQ|" + parts[2])
+            else:
+                print("unknown peer") """
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--name", default="python")
@@ -184,6 +221,7 @@ def main():
     app = App(Identity(args.name))
 
     threading.Thread(target=listen, args=(app, args.port), daemon=True).start()
+    # threading.Thread(target=input_loop, args=(app,), daemon=True).start()
     zeroconf = start_mdns(app, args.port)
 
     if args.peers.strip():
@@ -191,27 +229,56 @@ def main():
             threading.Thread(target=connect_with_retry, args=(app, addr), daemon=True).start()
 
     print("commands: peers | list <peer> | get <peer> <file> | ping <peer>")
+    print("DEBUG: main request loop running")
+    """ while True:
+        pc, filename = request_queue.get()
+
+        resp = input(f"[{pc.name}] wants file '{filename}'. Accept? (y/n): ").strip().lower()
+
+        if resp != "y":
+            send_encrypted(pc, "ERROR|request denied")
+            continue
+
+        path = SHARED_DIR / filename
+        if not path.exists():
+            send_encrypted(pc, "ERROR|file not found")
+            continue
+
+        data = path.read_bytes()
+        send_encrypted(pc, build_get_res(app.identity, filename, data))   """
+
+    """ while True:
+        pc, filename = request_queue.get()
+
+        resp = input(f"[{pc.name}] wants file '{filename}'. Accept? (y/n): ").strip().lower()
+
+        if resp != "y":
+            send_encrypted(pc, "ERROR|request denied")
+            continue
+
+        path = SHARED_DIR / filename
+        if not path.exists():
+            send_encrypted(pc, "ERROR|file not found")
+            continue
+
+        data = path.read_bytes()
+        send_encrypted(pc, build_get_res(app.identity, filename, data)) """
     while True:
-        line = input().strip()
-        parts = line.split(" ")
-        if parts[0] == "peers":
-            print("connected peers:", ", ".join(app.peer_names()))
-        elif parts[0] == "ping" and len(parts) == 2:
-            pc = app.get_conn(parts[1])
-            print("unknown peer" if not pc else "")
-            if pc:
-                send_encrypted(pc, "PING")
-        elif parts[0] == "list" and len(parts) == 2:
-            pc = app.get_conn(parts[1])
-            print("unknown peer" if not pc else "")
-            if pc:
-                send_encrypted(pc, "LIST_REQ")
-        elif parts[0] == "get" and len(parts) == 3:
-            pc = app.get_conn(parts[1])
-            print("unknown peer" if not pc else "")
-            if pc:
-                print(f"DEBUG: sending GET_REQ to {parts[1]}")
-                send_encrypted(pc, "GET_REQ|" + parts[2])
+        pc, filename = request_queue.get()
+
+        resp = input(f"[{pc.name}] wants file '{filename}'. Accept? (y/n): ").strip().lower()
+
+        if resp != "y":
+            send_encrypted(pc, "ERROR|request denied")
+            continue
+
+        path = SHARED_DIR / filename
+        if not path.exists():
+            send_encrypted(pc, "ERROR|file not found")
+            continue
+
+        data = path.read_bytes()
+        send_encrypted(pc, build_get_res(app.identity, filename, data))
 
 if __name__ == "__main__":
     main()
