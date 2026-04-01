@@ -18,7 +18,7 @@ class PeerConn {
     public final BufferedReader reader;
     public final BufferedWriter writer;
     public final byte[] key;
-    public final byte[] remotePub;
+    public byte[] remotePub;
 
     public PeerConn(String name, java.net.Socket socket, BufferedReader reader,
                     BufferedWriter writer, byte[] key, byte[] remotePub) {
@@ -65,10 +65,42 @@ public class Protocol {
         return md.digest(data);
     }
 
-/*     public static boolean verify(Ed25519PublicKeyParameters pub, byte[] msg, byte[] sig) {
-        return Handshake.verify(pub, msg, sig);
+    public static Path metadataPath(String filename) {
+        return Paths.get("downloads", filename + ".meta");
     }
- */
+
+    public static void saveMetadata(String filename, String originName, byte[] originPub, byte[] hash, byte[] sig) throws Exception {
+        String content = originName + "|" +
+                Base64.getEncoder().encodeToString(originPub) + "|" +
+                Base64.getEncoder().encodeToString(hash) + "|" +
+                Base64.getEncoder().encodeToString(sig);
+        Files.writeString(metadataPath(filename), content);
+    }
+
+    public static Object[] loadMetadata(String filename) throws Exception {
+        String content = Files.readString(metadataPath(filename)).trim();
+        String[] parts = content.split("\\|");
+        if (parts.length != 4) throw new IOException("invalid metadata");
+
+        String originName = parts[0];
+        byte[] originPub = Base64.getDecoder().decode(parts[1]);
+        byte[] hash = Base64.getDecoder().decode(parts[2]);
+        byte[] sig = Base64.getDecoder().decode(parts[3]);
+
+        return new Object[]{originName, originPub, hash, sig};
+    }
+
+    public static byte[] loadDownload(String filename) throws Exception {
+        String content = Files.readString(Paths.get("downloads", filename)).trim();
+        String[] parts = content.split("\\|");
+        if (parts.length != 2) throw new IOException("invalid stored file");
+
+        byte[] nonce = Base64.getDecoder().decode(parts[0]);
+        byte[] ciphertext = Base64.getDecoder().decode(parts[1]);
+
+        return Crypto.decrypt(sha256("local-secret-key".getBytes()), nonce, ciphertext);
+    }
+
     public static void processPayload(Main.App app, PeerConn pc, String payload) throws Exception {
         String[] parts = payload.split("\\|");
         String cmd = parts[0];
@@ -92,31 +124,57 @@ public class Protocol {
             // ask user
             System.out.print("[" + pc.name + "] wants file '" + filename + "'. Accept? (y/n): ");
 
-            Scanner scanner = new Scanner(System.in);
-            String resp = scanner.nextLine().trim();
+            BufferedReader console = new BufferedReader(new InputStreamReader(System.in));
+            String resp = console.readLine();
 
             if (!resp.equalsIgnoreCase("y")) {
                 sendEncrypted(pc, "ERROR|request denied");
                 return;
             }
 
-            Path path = Paths.get("shared_files", filename);
-            if (!Files.exists(path)) {
+            Path sharedPath = Paths.get("shared_files", filename);
+            Path downloadPath = Paths.get("downloads", filename);
+
+            byte[] data;
+            byte[] hash;
+            byte[] sig;
+            byte[] originPub;
+            String originName;
+
+            if (Files.exists(sharedPath)) {
+                data = Files.readAllBytes(sharedPath);
+
+                Path metaPath = Paths.get("shared_files", filename + ".meta");
+                if (Files.exists(metaPath)) {
+                    String content = Files.readString(metaPath).trim();
+                    String[] meta = content.split("\\|");
+                    originName = meta[0];
+                    originPub = Base64.getDecoder().decode(meta[1]);
+                    hash = Base64.getDecoder().decode(meta[2]);
+                    sig = Base64.getDecoder().decode(meta[3]);
+                } else {
+                    hash = sha256(data);
+                    sig = Handshake.sign(app.identity.priv, hash);
+                    originPub = app.identity.pub.getEncoded();
+                    originName = app.identity.name;
+                }
+            } else if (Files.exists(downloadPath)) {
+                data = loadDownload(filename);
+                Object[] meta = loadMetadata(filename);
+                originName = (String) meta[0];
+                originPub = (byte[]) meta[1];
+                hash = (byte[]) meta[2];
+                sig = (byte[]) meta[3];
+            } else {
                 sendEncrypted(pc, "ERROR|file not found");
                 return;
             }
-
-            byte[] data = Files.readAllBytes(path);
-            byte[] hash = sha256(data);
-            byte[] sig = Handshake.sign(app.identity.priv, hash);
-            byte[] originPub = app.identity.pub.getEncoded();
-            String originName = app.identity.name;
 
             String msg = "GET_RES|" + filename + "|" +
                     Base64.getEncoder().encodeToString(data) + "|" +
                     Base64.getEncoder().encodeToString(hash) + "|" +
                     Base64.getEncoder().encodeToString(sig) + "|" +
-                    Base64.getEncoder().encodeToString(originPub) + "|"+
+                    Base64.getEncoder().encodeToString(originPub) + "|" +
                     originName;
             sendEncrypted(pc, msg);
         } else if (cmd.equals("GET_RES")) {
@@ -135,11 +193,6 @@ public class Protocol {
                 return;
             }
 
-            /* Ed25519PublicKeyParameters remotePub = new Ed25519PublicKeyParameters(pc.remotePub, 0);
-            if (!Handshake.verify(remotePub, hash, sig)) {
-                System.out.println("[" + pc.name + "] signature verification failed for " + filename);
-                return;
-            } */
             byte[] originPubRaw = Base64.getDecoder().decode(parts[5]);
             String originName = parts[6];
 
@@ -150,10 +203,22 @@ public class Protocol {
                         + filename + " (original: " + originName + ")");
                 return;
             }
-            
-
-            Files.write(Paths.get("downloads", filename), data);
+            byte[][] enc = Crypto.encrypt(sha256("local-secret-key".getBytes()), data);
+            String encryptedPayload = Base64.getEncoder().encodeToString(enc[0]) + "|" +
+                    Base64.getEncoder().encodeToString(enc[1]);
+            Files.writeString(Paths.get("downloads", filename), encryptedPayload);
+            saveMetadata(filename, originName, originPubRaw, hash, sig);
             System.out.println("[" + pc.name + "] downloaded and verified " + filename + " (original: " + originName + ")");
+
+        } else if (cmd.equals("KEY_UPDATE")) {
+            if (parts.length < 2) {
+                System.out.println("[" + pc.name + "] malformed KEY_UPDATE");
+                return;
+            }
+
+            pc.remotePub = Base64.getDecoder().decode(parts[1]);
+            System.out.println("[" + pc.name + "] updated public key");
+
         } else if (cmd.equals("ERROR")) {
             String msg = parts.length > 1 ? parts[1] : "unknown";
             System.out.println("[" + pc.name + "] ERROR: " + msg);

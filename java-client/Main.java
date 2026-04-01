@@ -5,7 +5,7 @@ import java.util.concurrent.*;
 
 public class Main {
     static class App {
-        public final Identity identity;
+        public Identity identity;
         public final ConcurrentHashMap<String, PeerConn> conns = new ConcurrentHashMap<>();
 
         public App(Identity identity) {
@@ -123,6 +123,16 @@ public class Main {
                 PeerConn pc = app.conns.get(parts[1]);
                 if (pc == null) System.out.println("unknown peer");
                 else Protocol.sendEncrypted(pc, "GET_REQ|" + parts[2]);
+            } else if (parts[0].equals("rotate")) {
+                app.identity = new Identity(app.identity.name);
+                System.out.println("key rotated successfully");
+
+                String payload = "KEY_UPDATE|" +
+                        Base64.getEncoder().encodeToString(app.identity.pub.getEncoded());
+
+                for (PeerConn pc : app.conns.values()) {
+                    Protocol.sendEncrypted(pc, payload);
+                }
             }
         }
     }
