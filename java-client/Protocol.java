@@ -45,7 +45,9 @@ public class Protocol {
         List<String> out = new ArrayList<>();
         try (DirectoryStream<Path> stream = Files.newDirectoryStream(Paths.get("shared_files"))) {
             for (Path p : stream) {
-                if (Files.isRegularFile(p)) out.add(p.getFileName().toString());
+                if (Files.isRegularFile(p) && !p.getFileName().toString().endsWith(".meta")) {
+                    out.add(p.getFileName().toString());
+                }
             }
         }
         return out;

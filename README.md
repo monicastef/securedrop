@@ -180,6 +180,50 @@ java -cp ".:lib/*" Main --name java --port 9003
 
 ---
 
+## Testing
+
+### Automated Unit Tests
+
+Run the Go unit tests:
+
+```bash
+cd go-client
+go test ./...
+```
+
+Run the Python unit tests from the repo root:
+
+```bash
+python-client/.venv/bin/python -m unittest tests/test_python_protocol.py -v
+```
+
+Run the Java unit tests:
+
+```bash
+cd java-client
+javac -cp ".:lib/*" *.java
+java -cp ".:lib/*" ClientTests
+```
+
+Current automated coverage includes:
+
+* Go crypto round-trip
+* Go encrypted download storage round-trip
+* Go metadata round-trip
+* Go pending request and key-update handling
+* Python metadata round-trip
+* Python encrypted download storage round-trip
+* Python shared-file filtering
+* Python invalid stored-file handling
+* Java crypto round-trip
+* Java metadata round-trip
+* Java shared-file filtering
+* Java handshake sign/verify
+
+Manual test scenarios are documented in `tests/TESTS.md`.
+
+---
+
 ## How to Run
 
 ### Step 1 — Start Go Client

@@ -29,6 +29,14 @@ func safePrintln(a ...any) {
 	printMu.Unlock()
 }
 
+func stdinLoop(lines chan<- string) {
+	scanner := bufio.NewScanner(os.Stdin)
+	for scanner.Scan() {
+		lines <- scanner.Text()
+	}
+	close(lines)
+}
+
 func sha256Bytes(data []byte) []byte {
 	sum := sha256.Sum256(data)
 	return sum[:]
@@ -144,7 +152,8 @@ func main() {
 		}
 	}
 
-	scanner := bufio.NewScanner(os.Stdin)
+	commandLines := make(chan string, 32)
+	go stdinLoop(commandLines)
 	safePrintln("commands: peers | list <peer> | get <peer> <file> | ping <peer> | rotate")
 
 	for {
@@ -155,12 +164,13 @@ func main() {
 			safePrintln()
 			safePrintf("[%s] wants file '%s'. Accept? (y/n): ", req.Peer.Name, req.Filename)
 	
-			// read response ONCE (blocking only here, which is correct)
-			if !scanner.Scan() {
+			// block only while waiting for the approval response
+			line, ok := <-commandLines
+			if !ok {
 				break
 			}
-	
-			resp := strings.ToLower(strings.TrimSpace(scanner.Text()))
+
+			resp := strings.ToLower(strings.TrimSpace(line))
 	
 			if resp != "y" {
 				_ = sendEncrypted(req.Peer, "ERROR|request denied")
@@ -229,10 +239,17 @@ func main() {
 		}
 	
 		// ===== HANDLE COMMAND INPUT (non-blocking style) =====
-		if scanner.Scan() {
-			line := strings.TrimSpace(scanner.Text())
+		select {
+		case line, ok := <-commandLines:
+			if !ok {
+				return
+			}
+			line = strings.TrimSpace(line)
+			if line == "" {
+				continue
+			}
 			parts := strings.Split(line, " ")
-	
+		
 			switch parts[0] {
 	
 			case "peers":
@@ -297,8 +314,7 @@ func main() {
 					}
 				}
 			}
-	
-		} else {
+		default:
 			// small sleep prevents CPU spinning + allows request handling to stay responsive
 			time.Sleep(50 * time.Millisecond)
 		}
