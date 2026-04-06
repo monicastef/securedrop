@@ -18,13 +18,13 @@ func startMDNS(app *App, port string) {
 	addr, _ := net.ResolveIPAddr("ip4", host)
 
 	service, err := mdns.NewMDNSService(
-		host,                  // instance name
-		"_securedrop._tcp",    // service type
-		"",                    // domain
-		"",                    // host
-		mustAtoi(port),        // port
-		nil,                   // IPs (auto)
-		nil,                   // TXT records
+		host, // instance name
+		"_securedrop._tcp", // service type
+		"", // domain
+		"", // host
+		mustAtoi(port), // port
+		nil, // IPs
+		nil, // txt records
 	)
 	if err != nil {
 		log.Fatal(err)
@@ -87,13 +87,11 @@ func startMDNS(app *App, port string) {
 			mdns.Query(params)
 	
 			close(entriesCh)
-	
-			// time.Sleep(15 * time.Second)
 			
 			if len(app.ListPeers()) > 0 {
-				time.Sleep(30 * time.Second) // slow once connected
+				time.Sleep(30 * time.Second) // slow down once connected
 			} else {
-				time.Sleep(5 * time.Second) // faster until first peer
+				time.Sleep(5 * time.Second) // faster until first peer connection
 			}
 		}
 	}()

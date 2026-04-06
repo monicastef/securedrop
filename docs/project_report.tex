@@ -1,0 +1,260 @@
+\documentclass[sigconf,nonacm]{acmart}
+
+\title{SecureDrop: A Secure Cross-Language Peer-to-Peer File Sharing System}
+
+\author{Monica Stef}
+\affiliation{%
+  \institution{Queen's University}
+}
+\author{Ben Leray}
+\affiliation{%
+  \institution{Queen's University}
+}
+\author{Anjali Patel}
+\affiliation{%
+  \institution{Queen's University}
+}
+\renewcommand{\shortauthors}{Stef, Leray, and Patel}
+
+\begin{document}
+
+\begin{abstract}
+SecureDrop is a peer-to-peer file sharing application implemented across
+three languages: Go, Python, and Java. The project focuses on secure
+discovery, authenticated session establishment, encrypted communication,
+verified file transfer, and protected local storage. Each peer maintains
+an Ed25519 identity, performs a signed X25519 handshake to derive a fresh
+session key, and exchanges application messages over AES-GCM encrypted
+channels. The system supports user-approved file transfer, verified
+re-sharing using original-owner metadata, and identity key rotation.
+Testing in the repository covers protocol helpers, cryptographic
+round-trips, metadata persistence, filtered file listing, and selected
+security-sensitive update paths. The result is a working interoperable
+prototype that demonstrates how secure systems concepts can be implemented
+consistently across multiple programming languages.
+\end{abstract}
+
+\keywords{peer-to-peer systems, secure file sharing, authenticated key exchange, AES-GCM, Ed25519, X25519, cross-language interoperability}
+
+\maketitle
+
+\section{Introduction}
+Secure file sharing is often presented either as a networking problem or
+as a cryptography problem. In practice, real systems require both. A
+useful file sharing system must allow peers to locate one another,
+authenticate remote identities, protect data in transit, verify the
+origin of shared content, and preserve security when files are re-shared
+between multiple participants.
+
+This project implements these ideas in a cross-language setting. Our
+system, SecureDrop, includes Go, Python, and Java clients that speak a
+common protocol over TCP. The design goal was not only to transfer files,
+but to do so with explicit authentication and integrity guarantees while
+keeping the architecture simple enough to reason about and test.
+
+\section{System Overview}
+SecureDrop is a localhost/LAN peer-to-peer application in which each
+client can listen for incoming connections, connect to known peers,
+request file listings, send file requests, and download or re-share
+content. The repository contains three client implementations:
+\begin{itemize}
+\item a Go client,
+\item a Python client, and
+\item a Java client.
+\end{itemize}
+
+Each client maintains a \texttt{shared\_files/} directory for files it is
+willing to share and a \texttt{downloads/} directory for received files.
+The common command set includes peer listing, remote file listing, file
+request, connectivity testing through ping, and identity rotation.
+
+The project specifically implements the following course features:
+\begin{itemize}
+\item user consent before file transfer,
+\item verified file re-sharing,
+\item key rotation, and
+\item secure local storage for downloaded files.
+\end{itemize}
+
+\section{Protocol Design}
+\subsection{Handshake}
+SecureDrop uses a line-based protocol. During connection setup, each peer
+sends a \texttt{HELLO} message containing its user name, Ed25519 public
+key, ephemeral X25519 public key, and a signature over the ephemeral
+public key. The receiver verifies that signature before proceeding.
+
+After both \texttt{HELLO} messages are exchanged, each side computes a
+shared secret using X25519 and derives the session key as the SHA-256 hash
+of that shared secret. This provides authenticated session establishment
+and fresh per-connection keys. Because the long-term identity key signs
+the ephemeral key, the handshake binds the temporary Diffie--Hellman
+exchange to a stable identity.
+
+\subsection{Encrypted Messaging}
+After the handshake, all application payloads are sent inside encrypted
+\texttt{DATA} records. The payload is encrypted with AES-GCM using the
+derived session key and a fresh nonce. This gives confidentiality and
+integrity for commands such as:
+\begin{itemize}
+\item \texttt{PING},
+\item \texttt{LIST\_REQ} and \texttt{LIST\_RES},
+\item \texttt{GET\_REQ} and \texttt{GET\_RES},
+\item \texttt{KEY\_UPDATE}, and
+\item \texttt{ERROR}.
+\end{itemize}
+
+\subsection{File Transfer and Metadata}
+When a peer requests a file with \texttt{GET\_REQ}, the sender does not
+transfer immediately. Instead, the user is prompted to approve or reject
+the request. If approved, the sender returns a \texttt{GET\_RES} payload
+containing:
+\begin{itemize}
+\item the filename,
+\item the file contents,
+\item the SHA-256 hash of the contents,
+\item a signature on that hash,
+\item the original owner's public key, and
+\item the original owner's name.
+\end{itemize}
+
+This metadata allows a receiver to validate both integrity and authorship.
+If a downloaded file is later re-shared, the sender can preserve the
+original metadata rather than claiming authorship itself.
+
+\section{Security Features}
+\subsection{Mutual Authentication}
+All three clients authenticate the remote peer during the handshake by
+verifying an Ed25519 signature over the remote ephemeral key. In the Go
+client, an additional identity consistency check rejects a peer that
+reconnects under the same name with a different public key unless a valid
+key rotation has already updated trust.
+
+\subsection{Confidentiality and Integrity in Transit}
+Application traffic is protected with AES-GCM after session key
+derivation. Since AES-GCM is an authenticated encryption scheme, payload
+tampering is detected during decryption.
+
+\subsection{Verified Re-Sharing}
+Verified re-sharing is one of the most important project features. When a
+file originates locally, the sender hashes the contents with SHA-256 and
+signs the hash using its Ed25519 private key. When the file originates
+from a previous download, the sender reuses the stored origin metadata.
+The receiver recomputes the hash, compares it to the transmitted hash, and
+verifies the signature using the original owner's public key. This allows
+trust in the original source to survive across multiple sharing hops.
+
+\subsection{Secure Local Storage}
+Downloaded files are not stored in plaintext. In the Go and Python
+clients, files are encrypted before being written to disk and are stored
+in the form \texttt{base64(nonce)|base64(ciphertext)}. A separate metadata
+file stores the original owner, public key, hash, and signature. This
+protects against simple offline disclosure of downloaded content.
+
+The repository shows one implementation difference worth noting: the Go
+and Python clients derive a local storage key from the identity name,
+while the Java client currently uses a fixed local secret for downloaded
+file encryption. The report therefore treats secure local storage as fully
+implemented in Go and Python and partially aligned in Java.
+
+\subsection{Key Rotation}
+SecureDrop also supports identity rotation. The Go and Python clients send
+a \texttt{KEY\_UPDATE} message containing the new public key and a
+signature from the old key, allowing peers to verify that the update is
+authorized. This preserves trust while allowing an identity to migrate.
+
+The current Java client accepts a simpler \texttt{KEY\_UPDATE} format and
+updates the trusted key without verifying an old-key signature. As a
+result, signed key rotation is fully implemented in Go and Python and only
+partially implemented in Java in the current repository state.
+
+\section{Implementation}
+\subsection{Go Client}
+The Go client is the most complete reference implementation in the
+repository. It supports the full command loop, signed X25519 handshake,
+AES-GCM message protection, queued approval for incoming file requests,
+verified re-sharing, signed key update handling, and encrypted local
+download storage. It also contains repository tests for cryptographic
+round-trips, metadata persistence, pending request handling, and verified
+key update processing.
+
+\subsection{Python Client}
+The Python client mirrors the same protocol structure using the
+\texttt{cryptography} library. It supports handshake verification,
+encrypted application messages, metadata-aware file transfer, encrypted
+download storage, and signed key rotation verification. The Python tests
+cover metadata round-trip behavior, encrypted stored-file round trips,
+storage format rejection for malformed data, shared file filtering, and
+identity-dependent local storage keys.
+
+\subsection{Java Client}
+The Java client uses Bouncy Castle primitives for Ed25519 and X25519 and
+implements the common TCP message flow, authenticated handshake, AES-GCM
+message transport, file approval, and metadata-based verification on
+download. The Java implementation interoperates at the handshake and file
+transfer level, but the current repository code shows a simplified
+approach for key updates and local storage compared to Go and Python.
+
+\section{Testing and Evaluation}
+The repository includes both automated and manual testing guidance.
+Automated tests validate core helper functions in each language:
+\begin{itemize}
+\item Go tests cover AES-GCM round-trip encryption, encrypted download
+storage round-trip, metadata serialization, hidden metadata files in
+shared listings, queued pending requests, and verified key update
+handling.
+\item Python tests cover metadata save/load, encrypted download
+save/load, shared file filtering, invalid stored-file rejection, and
+deterministic per-identity storage keys.
+\item Java tests cover AES-GCM round-trip encryption, metadata
+serialization, hidden metadata files in shared listings, and Ed25519
+sign/verify behavior used by handshake helpers.
+\end{itemize}
+
+Manual end-to-end tests in the repository exercise peer discovery or
+reachability, file listing, user-approved transfer, verified download,
+integrity failure on tampering, signature failure on metadata tampering,
+key rotation, disconnect handling, and verified re-sharing across peers.
+
+Overall, the test suite gives strong confidence in the protocol helpers
+and storage paths, while full three-way interoperability still depends on
+manual execution of the clients together.
+
+\section{Limitations}
+Although the project successfully demonstrates secure peer-to-peer file
+sharing, the current prototype still has limitations.
+
+First, implementation parity is not perfect across all languages. The Go
+and Python clients implement stronger versions of key rotation and local
+storage protection than the current Java client. Second, trust management
+is still minimal; there is no external certificate infrastructure or
+long-term trust store beyond the peer logic maintained by each client.
+Third, testing focuses heavily on helper functions and selected protocol
+paths rather than large-scale automated interoperability scenarios.
+
+These limitations are acceptable for a course project prototype, but they
+also suggest clear next steps for future work.
+
+\section{Future Work}
+Several extensions would improve the system:
+\begin{itemize}
+\item unify feature parity across all three clients,
+\item add automated cross-language integration tests,
+\item strengthen persistent identity management and trust storage,
+\item replace ad hoc command-line interaction with a more robust user
+interface, and
+\item expand peer discovery and reconnect logic for less controlled
+network environments.
+\end{itemize}
+
+\section{Conclusion}
+SecureDrop demonstrates that a secure file sharing protocol can be
+implemented consistently across multiple programming languages while
+preserving the core security goals of authentication, confidentiality,
+integrity, and origin verification. The project combines Ed25519 identity
+keys, X25519 session establishment, AES-GCM encrypted transport, SHA-256
+content hashing, and metadata-preserving re-sharing into a coherent
+end-to-end design. The resulting system is a strong educational prototype
+that highlights both the value and the practical challenges of
+cross-language secure systems development.
+
+\end{document}

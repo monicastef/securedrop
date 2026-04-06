@@ -64,7 +64,7 @@ public class Handshake {
             throw new IOException("remote closed during handshake");
         }
 
-        line = line.trim();   // added
+        line = line.trim();
 
         String[] parts = line.split("\\|");
         if (parts.length != 5 || !parts[0].equals("HELLO")) {
@@ -76,7 +76,7 @@ public class Handshake {
         byte[] remoteEphRaw = Base64.getDecoder().decode(parts[3]);
         byte[] remoteSig = Base64.getDecoder().decode(parts[4]);
 
-        // added: match Go expectations
+        // match Go expectations
         if (remotePubRaw.length != 32) {
             throw new IOException("remote identity key wrong size: " + remotePubRaw.length);
         }

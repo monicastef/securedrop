@@ -158,7 +158,7 @@ func main() {
 
 	for {
 
-		// ===== HANDLE FILE REQUESTS (priority, non-blocking) =====
+		// handle file requests first
 		if req, ok := app.PopPending(); ok {
 	
 			safePrintln()
@@ -238,7 +238,7 @@ func main() {
 			continue
 		}
 	
-		// ===== HANDLE COMMAND INPUT (non-blocking style) =====
+		// handle command input
 		select {
 		case line, ok := <-commandLines:
 			if !ok {
@@ -315,7 +315,7 @@ func main() {
 				}
 			}
 		default:
-			// small sleep prevents CPU spinning + allows request handling to stay responsive
+			// small sleep tp prevent CPU spinning and allow request handling to stay responsive
 			time.Sleep(50 * time.Millisecond)
 		}
 	}

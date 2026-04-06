@@ -123,14 +123,14 @@ func listSharedFiles() []string {
 	}
 	out := []string{}
 	for _, e := range entries {
-		if !e.IsDir() && !strings.HasSuffix(e.Name(), ".meta") { // CHANGED: hide metadata files
+		if !e.IsDir() && !strings.HasSuffix(e.Name(), ".meta") { // hide metadata files
 			out = append(out, e.Name())
 		}
 	}
 	return out
 }
 
-// CHANGED FOR TASK 9: per-user local encryption key instead of global constant
+// per-user local encryption key instead of global constant
 func localStorageKey(name string) []byte {
 	return sha256Bytes([]byte(name + "-local-storage"))
 }
@@ -274,8 +274,7 @@ func processPayload(a *App, pc *PeerConn, payload string) {
 			return
 		}
 
-		// CHANGED FOR TASK 5:
-		// If we already have metadata for this filename, require the same origin identity.
+		// If we already have metadata for this filename, it must have the same origin identity.
 		metaPath := metadataPath(filename)
 		if _, err := os.Stat(metaPath); err == nil {
 			oldName, oldPub, _, _, err := loadMetadata(metaPath)
@@ -287,7 +286,7 @@ func processPayload(a *App, pc *PeerConn, payload string) {
 			}
 		}
 
-		// CHANGED FOR TASK 9: use per-user storage key
+		// use per-user storage key
 		if err := saveDownloadWithKey(filename, fileData, localStorageKey(a.Self.Name)); err != nil {
 			fmt.Printf("[%s] save failed: %v\n", pc.Name, err)
 			return
@@ -301,7 +300,6 @@ func processPayload(a *App, pc *PeerConn, payload string) {
 		fmt.Printf("[%s] downloaded and verified %s (original owner: %s)\n", pc.Name, filename, originName)
 
 	case "KEY_UPDATE":
-		// CHANGED FOR TASK 6:
 		// Format: KEY_UPDATE|new_pub|signature_by_old_key_over_new_pub
 		if len(parts) < 3 {
 			fmt.Printf("[%s] malformed KEY_UPDATE\n", pc.Name)

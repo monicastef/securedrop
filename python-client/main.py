@@ -98,7 +98,7 @@ def send_encrypted(pc: PeerConn, payload: str):
     pc.sock_file.flush()
 
 
-# ONLY place that reads stdin
+# only place that reads stdin
 def input_thread():
     while True:
         try:
@@ -158,7 +158,7 @@ def process_payload(app: App, pc: PeerConn, payload: str):
             safe_print(f"[{pc.name}] signature verification FAILED for {filename}")
             return
 
-        # Task 5
+        # task 5
         meta_file = metadata_path(filename)
         if meta_file.exists():
             try:
@@ -169,7 +169,7 @@ def process_payload(app: App, pc: PeerConn, payload: str):
             except:
                 pass
 
-        # Task 9
+        # task 9
         save_download(filename, data, local_storage_key(app.identity.name))
         save_metadata(filename, origin_name, origin_pub, expected_hash, sig)
 
@@ -262,13 +262,13 @@ def main():
 
     while True:
 
-        # HANDLE FILE REQUESTS (non-blocking + clean)
+        # handle file requests
         try:
             pc, filename = request_queue.get(timeout=0.1)
 
             safe_print(f"[{pc.name}] wants file '{filename}'. Accept? (y/n): ", end="", flush=True)
 
-            # wait for input safely
+            # safely wait for input 
             while True:
                 try:
                     resp = command_queue.get(timeout=0.1).strip().lower()
@@ -309,7 +309,7 @@ def main():
         except queue.Empty:
             pass
 
-        # ✅ HANDLE COMMANDS
+        # handle commands
         try:
             line = command_queue.get_nowait().strip()
             parts = line.split(" ")
